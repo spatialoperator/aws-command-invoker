@@ -1,0 +1,16 @@
+{
+  "apiVersions": {
+    "apigateway": "2015-07-09"
+  },
+  "commands": [
+    {
+      "objectType": "APIGateway",
+      "method": "getRestApis",
+      "comment": "Lists RestApi resources",
+      "resultsID": "getRestApisResults",
+      "params": {
+        "limit": 12
+      }
+    }
+  ]
+}

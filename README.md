@@ -10,6 +10,8 @@ The aws-command-invoker script invokes a series of AWS commands, which are speci
 
 [Configuration file](#Configuration-file)
 
+[Example configuration file](#Example-configuration-file)
+
 [Limitations](#Limitations)
 
 [Dependencies](#Dependencies)
@@ -32,22 +34,24 @@ Requires Node.js (tested with version 12.18.0), the [AWS SDK for JavaScript in N
 
 Start by specifying the AWS commands to be invoked. For example, the following configuration will list current REST APIs.
 
+```json
+{
+  "apiVersions": {
+    "apigateway": "2015-07-09"
+  },
+  "commands": [
     {
-      "apiVersions": {
-        "apigateway": "2015-07-09"
-      },
-      "commands": [
-        {
-          "objectType": "APIGateway",
-          "method": "getRestApis",
-          "comment": "Lists RestApi resources",
-          "resultsID": "getRestApisResults",
-          "params": {
-            "limit": 12
-          }
-        }
-      ]
+      "objectType": "APIGateway",
+      "method": "getRestApis",
+      "comment": "Lists RestApi resources",
+      "resultsID": "getRestApisResults",
+      "params": {
+        "limit": 12
+      }
     }
+  ]
+}
+```
 
 If this configuration is saved to `example.json`, it can be run as follows:
 
@@ -63,16 +67,18 @@ In the invocation below, [dotenv](https://github.com/motdotla/dotenv) is used to
 
 ## Configuration file
 
-Configuration is defined as an object in a JSON file. It has two parts.
+Configuration is defined as an object in a JSON file, which has two parts. (See below for an [example configuration file](#Example-configuration-file).)
 
 ### apiVersions
 
 The API versions of the AWS SDK classes are defined in this section. Refer to the AWS SDK documenation for each class for the appropriate parameter. For example:
 
-    "apiVersions": {
-        "apigateway": "2015-07-09",
-        "lambda": "2015-03-31"
-    }
+```json
+"apiVersions": {
+    "apigateway": "2015-07-09",
+    "lambda": "2015-03-31"
+}
+```
 
 ### commands
 
@@ -86,18 +92,20 @@ The commands to be invoked are defined, in order, in this section. For each comm
 
 For example:
 
-    "commands": [
-        {
-          "objectType": "APIGateway",
-          "method": "createRestApi",
-          "comment": "Create REST API",
-          "resultsID": "createRestApiResults",
-          "params": {
-            "name": "log-test-API",
-            "description": "log-test-API"
-          }
-        }
-     ]
+```json
+"commands": [
+    {
+      "objectType": "APIGateway",
+      "method": "createRestApi",
+      "comment": "Create REST API",
+      "resultsID": "createRestApiResults",
+      "params": {
+        "name": "log-test-API",
+        "description": "log-test-API"
+      }
+    }
+  ]
+```
 
 #### expectedResults
 
@@ -105,10 +113,12 @@ Optionally, an `expectedResults` property can be included in a command's configu
 
 Comparison is fairly naive: each property value is converted to a String (using JSON.stringify) and compared for equality. Expected values must be specified to match stringified values from results.
 
-    "expectedResults": {
-      "status": 200,
-      "body": "{\"test\":\"yes\"}"
-    }
+```json
+"expectedResults": {
+  "status": 200,
+  "body": "{\"test\":\"yes\"}"
+}
+```
 
 ### Replacements
 
@@ -121,23 +131,167 @@ Command parameter values can be replaced with previous result values or environm
 
 For example:
 
-    {
-      "objectType": "APIGateway",
-      "method": "createResource",
-      "comment": "Create resource, using parent ID returned for the root resource",
-      "resultsID": "createResourceResults",
-      "params": {
-        "pathPart": "%API_NAME%-resource",
-        "parentId": "{getResourcesResults.items[0].id}",
-        "restApiId": "{createRestApiResults.id}"
-      }
-    }
+```json
+{
+  "objectType": "APIGateway",
+  "method": "createResource",
+  "comment": "Create resource, using parent ID returned for the root resource",
+  "resultsID": "createResourceResults",
+  "params": {
+    "pathPart": "%API_NAME%-resource",
+    "parentId": "{getResourcesResults.items[0].id}",
+    "restApiId": "{createRestApiResults.id}"
+  }
+}
+```
 
 ### Environment variables
 
 Environment variables can be specified as replacements in the configuration file
 
 Also, if specified as an environment variable, the AWS region will be set. For example, `AWS_REGION=eu-west-2`
+
+## Example configuration file
+
+This example configuration file creates a REST API that integrates with an existing Lambda function. This is done by carrying out the following steps:
+
+* Create a new REST API
+* Get the root resource of the API to determine its ID
+* Create a resource, using the parent ID returned for the root resource
+* Create an integration with the Lambda function
+* Create an integration response
+* Grant permission to invoke the Lambda function
+* Create a deployment of the API
+* Test the invocation of the Lambda function via the API
+
+```json
+{
+  "apiVersions": {
+      "apigateway": "2015-07-09",
+      "lambda": "2015-03-31"
+  },
+  "commands": [
+    {
+      "objectType": "APIGateway",
+      "method": "createRestApi",
+      "comment": "Create REST API",
+      "resultsID": "createRestApiResults",
+      "params": {
+        "name": "log-test-API",
+        "description": "log-test-API"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "getResources",
+      "comment": "Get root resource to determine its ID",
+      "resultsID": "getResourcesResults",
+      "params": {
+        "restApiId": "{createRestApiResults.id}"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "createResource",
+      "comment": "Create resource, using parent ID returned for the root resource",
+      "resultsID": "createResourceResults",
+      "params": {
+        "pathPart": "log-test-resource",
+        "parentId": "{getResourcesResults.items[0].id}",
+        "restApiId": "{createRestApiResults.id}"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "putMethod",
+      "comment": "Create method",
+      "resultsID": "putMethodResults",
+      "params": {
+        "operationName": "log-test-method",
+        "httpMethod": "ANY",
+        "authorizationType": "NONE",
+        "apiKeyRequired": false,
+        "restApiId": "{createRestApiResults.id}",
+        "resourceId": "{createResourceResults.id}"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "putIntegration",
+      "comment": "Create integration",
+      "resultsID": "putIntegrationResults",
+      "params": {
+        "httpMethod": "ANY",
+        "type": "AWS_PROXY",
+        "integrationHttpMethod": "POST",
+        "passthroughBehavior": "WHEN_NO_MATCH",
+        "contentHandling": "CONVERT_TO_TEXT",
+        "timeoutInMillis": 29000,
+        "uri": "arn:aws:apigateway:{%AWS_REGION%}:lambda:path/2015-03-31/functions/arn:aws:lambda:{%AWS_REGION%}:{%AWS_ACCOUNT_ID%}:function:log-test/invocations",
+        "restApiId": "{createRestApiResults.id}",
+        "resourceId": "{createResourceResults.id}",
+        "cacheNamespace": "{createResourceResults.id}"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "putIntegrationResponse",
+      "comment": "Create integration response",
+      "resultsID": "putIntegrationResponse",
+      "params": {
+        "httpMethod": "ANY",
+        "statusCode": "200",
+        "responseTemplates": {
+          "application/json": null
+        },
+        "restApiId": "{createRestApiResults.id}",
+        "resourceId": "{createResourceResults.id}"
+      }
+    },
+    {
+      "objectType": "Lambda",
+      "method": "addPermission",
+      "comment": "Grant API permission to invoke Lambda",
+      "resultsID": "addPermissionResults",
+      "params": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": "log-test",
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": "arn:aws:execute-api:{%AWS_REGION%}:{%AWS_ACCOUNT_ID%}:{createRestApiResults.id}/*/*/log-test-resource",
+        "StatementId": "log-test-{createRestApiResults.id}"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "createDeployment",
+      "comment": "Create deployment",
+      "resultsID": "createDeploymentResults",
+      "params": {
+        "stageName": "alpha",
+        "stageDescription": "Alpha stage",
+        "description": "Deployment to alpha stage",
+        "restApiId": "{createRestApiResults.id}"
+      }
+    },
+    {
+      "objectType": "APIGateway",
+      "method": "testInvokeMethod",
+      "comment": "Test the method invocation",
+      "resultsID": "testInvokeMethodResults",
+      "params": {
+        "httpMethod": "GET",
+        "restApiId": "{createRestApiResults.id}",
+        "resourceId": "{createResourceResults.id}",
+        "pathWithQueryString": "https://{createRestApiResults.id}.execute-api.{%AWS_REGION%}.amazonaws.com/alpha/log-test-resource?test=yes"
+      },
+      "expectedResults": {
+        "status": 200,
+        "body": "{\"test\":\"yes\"}"
+      }
+    }
+  ]
+}
+```
 
 ## Limitations
 

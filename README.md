@@ -59,7 +59,7 @@ If this configuration is saved to `example.json`, it can be run as follows:
 
 ### Log-test example
 
-The `log-test-api.json` configuration file is an example of specifying AWS commands to create a new REST API that can be used to invoke a Lambda function called log-test.
+The `log-test-api.json` configuration file (see [example configuration file](#Example-configuration-file)) is an example of specifying AWS commands to create a new REST API that can be used to invoke a Lambda function called log-test.
 
 In the invocation below, [dotenv](https://github.com/motdotla/dotenv) is used to set environment variables
 
@@ -128,6 +128,8 @@ Command parameter values can be replaced with previous result values or environm
 * `.` - identifiers for replacements from returned results are separated with this character
 * `%` - replacements from environment variables are marked (start & end) with this character
 * `[ ]` - replacements referencing array values start and end with these characters
+* `< >` - list of files to zip starts and ends with these characters
+* `|` - individual files to zip are separated with this character
 
 For example:
 
@@ -150,6 +152,30 @@ For example:
 Environment variables can be specified as replacements in the configuration file
 
 Also, if specified as an environment variable, the AWS region will be set. For example, `AWS_REGION=eu-west-2`
+
+### Files to zip
+
+If a Zip file is required as a parameter, a list of files to zip can be provided. For example:
+
+```json
+{
+  "apiVersions": {
+    "lambda": "2015-03-31"
+  },
+  "commands": [
+    {
+      "objectType": "Lambda",
+      "method": "updateFunctionCode",
+      "comment": "Update Lambda function code",
+      "resultsID": "updateFunctionCodeResults",
+      "params": {
+        "FunctionName": "log-test",
+        "ZipFile": "<{%ZIP_SOURCE_01%}|{%ZIP_SOURCE_02%}>"
+      }
+    }
+  ]
+}
+```
 
 ## Example configuration file
 
@@ -299,9 +325,13 @@ Limited error handling
 
 Rudimentary results testing
 
+Files to zip are buffered in memory. For large volumes, consider handling Zip file separately
+
 ## Dependencies
 
 * [aws-sdk](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS.html)
+
+* [adm-zip](https://github.com/cthackers/adm-zip)
 
 ## Authors
 

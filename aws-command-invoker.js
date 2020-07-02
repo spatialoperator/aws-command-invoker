@@ -1,6 +1,7 @@
 'use strict'
 
 const AWS = require('aws-sdk');
+const AdmZip = require('adm-zip');
 
 // Replacements start and end with these characters
 const REP_START = "{";
@@ -12,6 +13,10 @@ const ENV_MARKER = "%";
 // Replacements referencing array values start and end with these characters
 const ARR_MARKER_START = "[";
 const ARR_MARKER_END = "]";
+// Replacements for Zip files start and end with these characters, and are separated with this character
+const ZIP_MARKER_START = "<";
+const ZIP_MARKER_END = ">";
+const ZIP_SEPARATOR = "|";
 
 /**
  * Replaces parameter values in the given apiCommand with result values from previous commands or environment variables.
@@ -28,7 +33,7 @@ function replaceParams(apiCommand, apiResults) {
     if (typeof propertyVal === "string") {
       startIndex = propertyVal.indexOf(REP_START, 0);
       while (startIndex > -1) {
-        endIndex = propertyVal.indexOf(REP_END, startIndex);  
+        endIndex = propertyVal.indexOf(REP_END, startIndex);
         let repTarget = propertyVal.substring(startIndex + 1, endIndex);
         let repVal = null;
 
@@ -40,8 +45,8 @@ function replaceParams(apiCommand, apiResults) {
           // Check whether to replace using value from returned array
           let arrMarkerStart = repTarget.indexOf(ARR_MARKER_START);
           if (arrMarkerStart < 0) {
-            let repParts = repTarget.split(REP_SEPARATOR);  
-            repVal = apiResults[repParts[0]][repParts[1]];  
+            let repParts = repTarget.split(REP_SEPARATOR);
+            repVal = apiResults[repParts[0]][repParts[1]];
           } else {
             let sourceParts = repTarget.substring(0, arrMarkerStart).split(REP_SEPARATOR);
             let arrMarkerEnd = repTarget.indexOf(ARR_MARKER_END);
@@ -55,9 +60,37 @@ function replaceParams(apiCommand, apiResults) {
         propertyVal = propertyVal.replace(REP_START + repTarget + REP_END, repVal);
         startIndex = propertyVal.indexOf(REP_START, (startIndex + repVal.length));
       }
-      apiCommand.params[property] = propertyVal;  
+      
+      propertyVal = replaceZipFilesAsBuffer(propertyVal);
+      apiCommand.params[property] = propertyVal;
     }
   }
+}
+
+/**
+ * Make any replacements to provide a Zip file as a buffer.
+ * @param {String} propertyVal - API command property value
+ * @returns {Object} Buffered Zip file
+ */
+function replaceZipFilesAsBuffer(propertyVal) {
+  // Check for Zip file markers
+  let startIndex = propertyVal.indexOf(ZIP_MARKER_START, 0);
+  if (startIndex > -1) {
+    let endIndex = propertyVal.indexOf(ZIP_MARKER_END, startIndex);
+    let zipFiles = propertyVal.substring(startIndex + 1, endIndex).split(ZIP_SEPARATOR);
+
+    try {
+      let zip = new AdmZip();
+      for (let i = 0; i < zipFiles.length; i++) {
+        zip.addLocalFile(zipFiles[i]);
+      }
+      propertyVal = zip.toBuffer();
+    } catch (error) {
+      console.error("replaceZip - error: %s", error);
+      throw error;
+    }
+  }
+  return propertyVal;
 }
 
 /**
@@ -102,7 +135,8 @@ function checkResults(apiCommand, returnedResults) {
 
 /**
  * Invokes the given commands
- * @param {*} commands 
+ * @param {Object[]} commands
+ * @returns {Boolean} success
  */
 async function invokeCommands(commands) {
   let apiResults = {};  // Used to store results of each API command, uses resultsID property as key
@@ -131,6 +165,7 @@ async function invokeCommands(commands) {
 }
 
 // Determine the configuration file to use
+console.log(process.cwd());
 const configFile = process.argv[2];
 if (configFile === undefined) {
   console.error("Please specify configuration file");

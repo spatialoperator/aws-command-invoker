@@ -155,7 +155,44 @@ Also, if specified as an environment variable, the AWS region will be set. For e
 
 ### Files to zip
 
-If a Zip file is required as a parameter, a list of files to zip can be provided. For example:
+If a Zip file is required as a parameter, a list of files to zip can be provided. For example, the following configuration creates a new Lambda function, supplying the code using the Zip file mechanism.
+
+```json
+{
+  "apiVersions": {
+    "lambda": "2015-03-31"
+  },
+  "commands": [
+    {
+      "objectType": "Lambda",
+      "method": "createFunction",
+      "comment": "Create Lambda function",
+      "resultsID": "createFunctionResults",
+      "params": {
+        "FunctionName": "log-test",
+        "Code": {
+          "ZipFile": "<{%ZIP_SOURCE_01%}>"
+        },
+        "Handler": "log-test.lambdaHandler",
+        "Role": "arn:aws:iam::{%AWS_ACCOUNT_ID%}:role/lambda_basic_execution",
+        "Runtime": "nodejs12.x",
+        "Description": "log-test",
+        "Environment": {
+          "Variables": {
+            "LOG_LEVEL": "info"
+          }
+        },
+        "Layers": [
+          "arn:aws:lambda:{%AWS_REGION%}:{%AWS_ACCOUNT_ID%}:layer:{%LAYER_NAME%}:{%LAYER_VERSION%}"
+        ],
+        "Publish": true
+      }
+    }
+  ]
+}
+```
+
+The following configuration updates the code for the Lambda function created in the example above, again using the Zip file mechanism. In this example, multiple source files are specified.
 
 ```json
 {

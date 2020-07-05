@@ -19,50 +19,65 @@ const ZIP_MARKER_END = ">";
 const ZIP_SEPARATOR = "|";
 
 /**
+ * Replaces parameter values in the given propertyVal with result values from previous commands or environment variables.
+ * @param {Object} propertyVal - parameter values will be updated
+ * @param {Object} apiResults - results from previous commands
+ * @returns {Object} updated propertyVal
+ */
+function replaceInlineParams(propertyVal, apiResults) {
+  let endIndex, startIndex = propertyVal.indexOf(REP_START, 0);
+  while (startIndex > -1) {
+    endIndex = propertyVal.indexOf(REP_END, startIndex);
+    let repTarget = propertyVal.substring(startIndex + 1, endIndex);
+    let repVal = null;
+
+    // Check whether to replace from environment variables or returned results
+    if (repTarget.indexOf(ENV_MARKER) === 0) {
+      let envTarget = repTarget.substring(1, repTarget.length - 1);
+      repVal = process.env[envTarget];
+    } else {
+      // Check whether to replace using value from returned array
+      let arrMarkerStart = repTarget.indexOf(ARR_MARKER_START);
+      if (arrMarkerStart < 0) {
+        let repParts = repTarget.split(REP_SEPARATOR);
+        repVal = apiResults[repParts[0]][repParts[1]];
+      } else {
+        let sourceParts = repTarget.substring(0, arrMarkerStart).split(REP_SEPARATOR);
+        let arrMarkerEnd = repTarget.indexOf(ARR_MARKER_END);
+        let indexVal = repTarget.substring(arrMarkerStart + 1, arrMarkerEnd);
+        let prop = repTarget.substring(arrMarkerEnd + 2);
+        repVal = apiResults[sourceParts[0]][sourceParts[1]][Number.parseInt(indexVal)][prop];
+      }
+    }
+
+    // TODO: in theory, could swap a lot of this for the regex version of replace
+    propertyVal = propertyVal.replace(REP_START + repTarget + REP_END, repVal);
+    startIndex = propertyVal.indexOf(REP_START, (startIndex + repVal.length));
+  }
+
+  return propertyVal;
+}
+
+/**
  * Replaces parameter values in the given apiCommand with result values from previous commands or environment variables.
- * @param {Object} apiCommand - apiCommand - parameter values will be updated
+ * @param {Object} params - params - parameter values will be updated
  * @param {Object} apiResults - results from previous commands
  */
-function replaceParams(apiCommand, apiResults) {
-  let params = apiCommand.params;
-  let startIndex, endIndex;
+function replaceParams(params, apiResults) {
   let propertyVal = null;
   for (const property in params) {
     propertyVal = params[property];
+
+    // Check for Object or Array parameters (& guard for null); recurse to replace within these
+    if ((propertyVal !== null) && (typeof propertyVal === "object")) {
+      replaceParams(propertyVal, apiResults);
+    }
+
     // Check string parameters for any replacements
     if (typeof propertyVal === "string") {
-      startIndex = propertyVal.indexOf(REP_START, 0);
-      while (startIndex > -1) {
-        endIndex = propertyVal.indexOf(REP_END, startIndex);
-        let repTarget = propertyVal.substring(startIndex + 1, endIndex);
-        let repVal = null;
-
-        // Check whether to replace from environment variables or returned results
-        if (repTarget.indexOf(ENV_MARKER) === 0) {
-          let envTarget = repTarget.substring(1, repTarget.length - 1);
-          repVal = process.env[envTarget];
-        } else {
-          // Check whether to replace using value from returned array
-          let arrMarkerStart = repTarget.indexOf(ARR_MARKER_START);
-          if (arrMarkerStart < 0) {
-            let repParts = repTarget.split(REP_SEPARATOR);
-            repVal = apiResults[repParts[0]][repParts[1]];
-          } else {
-            let sourceParts = repTarget.substring(0, arrMarkerStart).split(REP_SEPARATOR);
-            let arrMarkerEnd = repTarget.indexOf(ARR_MARKER_END);
-            let indexVal = repTarget.substring(arrMarkerStart + 1, arrMarkerEnd);
-            let prop = repTarget.substring(arrMarkerEnd + 2);
-            repVal = apiResults[sourceParts[0]][sourceParts[1]][Number.parseInt(indexVal)][prop];
-          }
-        }
-  
-        // TODO: in theory, could swap a lot of this for the regex version of replace
-        propertyVal = propertyVal.replace(REP_START + repTarget + REP_END, repVal);
-        startIndex = propertyVal.indexOf(REP_START, (startIndex + repVal.length));
-      }
-      
+      propertyVal = replaceInlineParams(propertyVal, apiResults);
       propertyVal = replaceZipFilesAsBuffer(propertyVal);
-      apiCommand.params[property] = propertyVal;
+      params[property] = propertyVal;
     }
   }
 }
@@ -143,7 +158,7 @@ async function invokeCommands(commands) {
   let success = false;
   for (let i = 0; i < commands.length; i++) {
     let apiCommand = commands[i];
-    replaceParams(apiCommand, apiResults);
+    replaceParams(apiCommand.params, apiResults);
     console.log(apiCommand);
     success = false;
     await invokeAPI(apiCommand).

@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('fs');
 const AWS = require('aws-sdk');
 const AdmZip = require('adm-zip');
 
@@ -14,6 +15,7 @@ const ENV_MARKER = "%";
 const ARR_MARKER_START = "[";
 const ARR_MARKER_END = "]";
 // Replacements for Zip files start and end with these characters, and are separated with this character
+const ZIP_FILE_EXTENSION = ".zip"; // NB: keep as lowercase for comparison
 const ZIP_MARKER_START = "<";
 const ZIP_MARKER_END = ">";
 const ZIP_SEPARATOR = "|";
@@ -95,13 +97,18 @@ function replaceZipFilesAsBuffer(propertyVal) {
     let zipFiles = propertyVal.substring(startIndex + 1, endIndex).split(ZIP_SEPARATOR);
 
     try {
-      let zip = new AdmZip();
-      for (let i = 0; i < zipFiles.length; i++) {
-        zip.addLocalFile(zipFiles[i]);
+      // Check for Zip file as argument
+      if (zipFiles[0].toLowerCase().endsWith(ZIP_FILE_EXTENSION)) {
+        propertyVal = fs.readFileSync(zipFiles[0]);
+      } else {
+        let zip = new AdmZip();
+        for (let i = 0; i < zipFiles.length; i++) {
+          zip.addLocalFile(zipFiles[i]);
+          propertyVal = zip.toBuffer();
+        }
       }
-      propertyVal = zip.toBuffer();
     } catch (error) {
-      console.error("replaceZip - error: %s", error);
+      console.error("replaceZipFilesAsBuffer - error: %s", error);
       throw error;
     }
   }

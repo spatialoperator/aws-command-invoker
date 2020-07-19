@@ -128,7 +128,7 @@ Command parameter values can be replaced with previous result values or environm
 * `.` - identifiers for replacements from returned results are separated with this character
 * `%` - replacements from environment variables are marked (start & end) with this character
 * `[ ]` - replacements referencing array values start and end with these characters
-* `< >` - list of files to zip starts and ends with these characters
+* `< >` - individual Zip files or a list of files to zip starts and ends with these characters
 * `|` - individual files to zip are separated with this character
 
 For example:
@@ -153,9 +153,35 @@ Environment variables can be specified as replacements in the configuration file
 
 Also, if specified as an environment variable, the AWS region will be set. For example, `AWS_REGION=eu-west-2`
 
-### Files to zip
+### Zip files
 
-If a Zip file is required as a parameter, a list of files to zip can be provided. For example, the following configuration creates a new Lambda function, supplying the code using the Zip file mechanism.
+If a Zip file is required as a parameter it can be indicated within the `< >` characters. ACI will provide the Zip file to AWS in a [Buffer](https://nodejs.org/docs/latest-v12.x/api/buffer.html) object, which is required by the AWS SDK. The specified Zip file must end with the `.zip` extension (this is not case sensitive). For example, the following configuration publishes a new Lambda Layer, supplying the code in a Zip file, the path to which is specified using an environment variable.
+
+```json
+{
+  "apiVersions": {
+    "lambda": "2015-03-31"
+  },
+  "commands": [
+    {
+      "objectType": "Lambda",
+      "method": "publishLayerVersion",
+      "comment": "Publish Lambda layer version",
+      "resultsID": "publishLayerVersionResults",
+      "params": {
+        "LayerName": "messages-post-layer",
+        "Description": "messages-post-layer",
+        "CompatibleRuntimes": ["nodejs12.x"],
+        "Content": {
+          "ZipFile": "<{%LAYERS_ZIP_FILE%}>"
+        }
+      }
+    }
+  ]
+}
+```
+
+Alternatively, a list of files to zip can be provided. For example, the following configuration creates a new Lambda function, supplying the code using the Zip file mechanism.
 
 ```json
 {

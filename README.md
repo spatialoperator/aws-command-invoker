@@ -125,9 +125,11 @@ Comparison is fairly naive: each property value is converted to a String (using 
 Command parameter values can be replaced with previous result values or environment variables. Replacement placeholders use the following syntax.
 
 * `{ }` - replacements start and end with these characters
+* `!` - indicates that preceding replacement start character should be unescaped
 * `.` - identifiers for replacements from returned results are separated with this character
 * `%` - replacements from environment variables are marked (start & end) with this character
 * `[ ]` - replacements referencing array values start and end with these characters
+* `$` - array value replacements are identified (and separated) with this character
 * `< >` - individual Zip files or a list of files to zip starts and ends with these characters
 * `|` - individual files to zip are separated with this character
 
@@ -136,13 +138,18 @@ For example:
 ```json
 {
   "objectType": "APIGateway",
-  "method": "createResource",
-  "comment": "Create resource, using parent ID returned for the root resource",
-  "resultsID": "createResourceResults",
+  "method": "getRestApis",
+  "comment": "Get the available REST APIs",
+  "resultsID": "getRestApisResults",
+  "params": {}
+},
+{
+  "objectType": "APIGateway",
+  "method": "getResources",
+  "comment": "Retrieve the ID of the REST API",
+  "resultsID": "getResourcesResults",
   "params": {
-    "pathPart": "%API_NAME%-resource",
-    "parentId": "{getResourcesResults.items[0].id}",
-    "restApiId": "{createRestApiResults.id}"
+    "restApiId": "{getRestApisResults.items[$name$%REST_API_NAME%$].id}"
   }
 }
 ```

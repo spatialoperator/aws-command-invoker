@@ -7,6 +7,8 @@ const AdmZip = require('adm-zip');
 // Replacements start and end with these characters
 const REP_START = "{";
 const REP_END = "}";
+// Marker to indicate that preceding replacement start character should be unescaped
+const UNESCAPE_MARKER = "!";
 // Identifiers for replacements from returned results are separated with this character
 const REP_SEPARATOR = ".";
 // Replacements from environment variables are marked (start & end) with this character
@@ -14,6 +16,8 @@ const ENV_MARKER = "%";
 // Replacements referencing array values start and end with these characters
 const ARR_MARKER_START = "[";
 const ARR_MARKER_END = "]";
+// Array value replacements are identified (and separated) with this character
+const ARR_VALUE_MARKER = "$";
 // Replacements for Zip files start and end with these characters, and are separated with this character
 const ZIP_FILE_EXTENSION = ".zip"; // NB: keep as lowercase for comparison
 const ZIP_MARKER_START = "<";
@@ -22,22 +26,27 @@ const ZIP_SEPARATOR = "|";
 
 /**
  * Replaces parameter values in the given propertyVal with result values from previous commands or environment variables.
- * @param {Object} propertyVal - parameter values will be updated
+ * @param {String} propertyVal - parameter values will be updated
  * @param {Object} apiResults - results from previous commands
- * @returns {Object} updated propertyVal
+ * @returns {String} updated propertyVal
  */
 function replaceInlineParams(propertyVal, apiResults) {
+  // Replace any environment variables
+  propertyVal = replaceEnvVars(propertyVal);
+
   let endIndex, startIndex = propertyVal.indexOf(REP_START, 0);
   while (startIndex > -1) {
-    endIndex = propertyVal.indexOf(REP_END, startIndex);
-    let repTarget = propertyVal.substring(startIndex + 1, endIndex);
-    let repVal = null;
-
-    // Check whether to replace from environment variables or returned results
-    if (repTarget.indexOf(ENV_MARKER) === 0) {
-      let envTarget = repTarget.substring(1, repTarget.length - 1);
-      repVal = process.env[envTarget];
+    // Check for UNESCAPE_MARKER, if found replace and move on
+    // TODO: test with REP_START as last char in a propertyVal value
+    if (propertyVal[startIndex + 1] === UNESCAPE_MARKER) {
+      propertyVal = propertyVal.replace(UNESCAPE_MARKER, "");
+      // TODO: guard against this being -1
+      startIndex = propertyVal.indexOf(REP_START, startIndex + 1);
     } else {
+      endIndex = propertyVal.indexOf(REP_END, startIndex);
+      let repTarget = propertyVal.substring(startIndex + 1, endIndex);
+      let repVal = null;
+
       // Check whether to replace using value from returned array
       let arrMarkerStart = repTarget.indexOf(ARR_MARKER_START);
       if (arrMarkerStart < 0) {
@@ -46,18 +55,80 @@ function replaceInlineParams(propertyVal, apiResults) {
       } else {
         let sourceParts = repTarget.substring(0, arrMarkerStart).split(REP_SEPARATOR);
         let arrMarkerEnd = repTarget.indexOf(ARR_MARKER_END);
-        let indexVal = repTarget.substring(arrMarkerStart + 1, arrMarkerEnd);
         let prop = repTarget.substring(arrMarkerEnd + 2);
+        let indexVal = -1;
+        // Check for ARR_VALUE_MARKER
+        if (repTarget.indexOf(ARR_VALUE_MARKER) < 0) {
+          indexVal = repTarget.substring(arrMarkerStart + 1, arrMarkerEnd);
+        } else {
+          let repTargetParts = repTarget.split(ARR_VALUE_MARKER);
+          // TODO: check for -1 (i.e. not found)
+          indexVal = locateIndexByKeyValue(apiResults[sourceParts[0]][sourceParts[1]], repTargetParts[1], repTargetParts[2]);
+        }
         repVal = apiResults[sourceParts[0]][sourceParts[1]][Number.parseInt(indexVal)][prop];
       }
-    }
 
-    // TODO: in theory, could swap a lot of this for the regex version of replace
-    propertyVal = propertyVal.replace(REP_START + repTarget + REP_END, repVal);
-    startIndex = propertyVal.indexOf(REP_START, (startIndex + repVal.length));
+      // TODO: check that repVal has been found / populated (e.g. missing env var)
+      // TODO: in theory, could swap a lot of this for the regex version of replace
+      propertyVal = propertyVal.replace(REP_START + repTarget + REP_END, repVal);
+      startIndex = propertyVal.indexOf(REP_START, (startIndex + repVal.length));
+    }
   }
 
   return propertyVal;
+}
+
+/**
+ * Replaces any environment variables in the given target String. Environment variables
+ * must be contained within ENV_MARKER characters and fall between REP_START and REP_END
+ * characters. If only the environment variable falls between the REP_START and REP_END
+ * characters, these will be removed too.
+ * @param {String} target - the target String
+ * @returns {String} target String with any replacements made
+ */
+function replaceEnvVars(target) {
+  let repStartIndex = target.indexOf(REP_START);
+  let envTarget, envEndIndex, envStartIndex;
+  while (repStartIndex >= 0) {
+    // Check that REP_START wasn't escaped
+    if (target.indexOf(UNESCAPE_MARKER, repStartIndex) != (repStartIndex + 1)) {
+      envStartIndex = target.indexOf(ENV_MARKER);
+      while (envStartIndex >= 0) {
+        envEndIndex = target.indexOf(ENV_MARKER, envStartIndex + 1);
+        envTarget = target.substring(envStartIndex + 1, envEndIndex);
+
+        // Check whether the environment variable was on its own
+        if (target.indexOf(REP_START + ENV_MARKER + envTarget + ENV_MARKER + REP_END) >= 0) {
+          target = target.replace(REP_START + ENV_MARKER + envTarget + ENV_MARKER + REP_END, process.env[envTarget]);
+        } else {
+          target = target.replace(ENV_MARKER + envTarget + ENV_MARKER, process.env[envTarget]);
+        }
+
+        envStartIndex = target.indexOf(ENV_MARKER);
+      }
+    }
+    repStartIndex = target.indexOf(REP_START, repStartIndex + 1);
+  }
+
+  return target;
+}
+
+/**
+ * Returns the index of an array item by matching against the given key and value.
+ * NB: will only search first level properties.
+ * @param {Array} items - the Object array to search
+ * @param {String} key - the property name
+ * @param {String} value - the property value
+ */
+function locateIndexByKeyValue(items, key, value) {
+  let index = -1;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i][key] === value) {
+      index = i;
+      break;
+    }
+  }
+  return index;
 }
 
 /**
